@@ -1,0 +1,5 @@
+utilization_pct,utilization,num_blocks,logical_writes,physical_writes,waf,segment_erases,gc_runs,gc_pages_copied
+40%,0.4,819,2000,2111,1.0555,15,15,111
+60%,0.6,1228,2000,2718,1.359,31,31,718
+80%,0.8,1638,2000,5395,2.6975,79,79,3395
+95%,0.95,1945,2000,38629,19.3145,603,603,36629

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>F2FS Flash Simulator — In-Place vs. Log-Structured Writes</title>
+  <meta name="description" content="Minimalist, editorial visualization of flash memory dynamics: in-place updates vs. log-structured writes." />
+
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js for interactive analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <link rel="stylesheet" href="style.css?v=6" />
+</head>
+<body>
+  <div class="page-wrapper">
+
+    <!-- Minimal Header (Matching reference nav layout) -->
+    <nav class="navbar">
+      <a href="#" class="brand-group">
+        <span class="brand-symbol">flash<span class="brand-dot">·</span>f2fs</span>
+      </a>
+
+      <ul class="nav-menu">
+        <li class="nav-item"><a href="#studio">Live Studio</a></li>
+        <li class="nav-item"><a href="#benchmarks">Benchmarks</a></li>
+        <li class="nav-item"><a href="#insights">Insights</a></li>
+        <li class="nav-item"><a href="README.md" target="_blank">Docs</a></li>
+      </ul>
+
+      <a href="#studio" class="nav-action-btn">Launch Simulator</a>
+    </nav>
+
+    <!-- Clean Project Title & Description Hero -->
+    <header class="project-hero-clean">
+      <h1 class="project-hero-title">F2FS Flash Storage Simulator</h1>
+      <h2 class="project-hero-sub">In-Place Updates vs. Log-Structured Writes</h2>
+
+      <p class="project-hero-desc">
+        Flash memory (SSDs, smartphones, USB storage) has an unavoidable physical rule: 
+        <strong>a page cannot be overwritten directly once written—an entire block/segment must be erased first</strong>.
+        Traditional in-place updates trigger destructive full-segment erases and rewrites, causing severe write amplification (WAF ~63x) and burning through drive lifespan.
+      </p>
+
+      <p class="project-hero-desc" style="margin-top: 0.75rem;">
+        This simulator models flash hardware at the page and segment level to demonstrate how 
+        <strong>F2FS (Flash-Friendly File System)</strong> solves this bottleneck using out-of-place sequential appends, 
+        logical-to-physical mapping tables, and greedy garbage collection—slashing write amplification down to <strong>1.74x</strong> and delivering a <strong>36x reduction in flash wear</strong>.
+      </p>
+
+      <div class="project-hero-pills">
+        <span class="hero-chip chip-orange">⚡ 36× Flash Wear Reduction</span>
+        <span class="hero-chip">📊 1.74× vs 63.34× WAF</span>
+        <span class="hero-chip">♻️ Greedy Garbage Collection</span>
+        <span class="hero-chip">🛡️ Physical Overwrite Enforcement</span>
+      </div>
+    </header>
+
+    <!-- Interactive Live Studio Section -->
+    <section id="studio">
+      <div class="section-title-wrap">
+        <div>
+          <h2 class="sec-title">Interactive Flash Studio</h2>
+          <p class="sec-subtitle">Click to write blocks, observe sequential append, and watch greedy garbage collection reclaim stale space.</p>
+        </div>
+      </div>
+
+      <div class="interactive-studio">
+        <!-- Control Bar -->
+        <div class="studio-toolbar">
+          <div class="pill-switch">
+            <button class="pill-switch-btn active" data-strategy="log_structured" id="btnStratLog" onclick="window.switchStrategy('log_structured')">
+              Log-Structured (F2FS)
+            </button>
+            <button class="pill-switch-btn" data-strategy="in_place" id="btnStratInPlace" onclick="window.switchStrategy('in_place')">
+              In-Place Baseline
+            </button>
+          </div>
+
+          <div class="action-cluster">
+            <button class="app-btn app-btn-accent" id="btnWriteRandom" onclick="window.performSingleWrite(false)">
+              ✍️ Write LBA
+            </button>
+            <button class="app-btn" id="btnWriteHot" onclick="window.performSingleWrite(true)">
+              🔥 Hot Write (80/20)
+            </button>
+            <button class="app-btn" id="btnBatchWrites" onclick="window.performBatchWrites(20)">
+              ⚡ 20 Writes
+            </button>
+            <button class="app-btn app-btn-warm" id="btnRunGc" onclick="window.performManualGC()">
+              ♻️ Run GC
+            </button>
+            <button class="app-btn" id="btnResetSim" onclick="window.initSimulation()">
+              🔄 Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="state-legend">
+          <span class="legend-chip">
+            <span class="legend-square sq-free"></span>
+            <span>Free (Clean)</span>
+          </span>
+          <span class="legend-chip">
+            <span class="legend-square sq-valid"></span>
+            <span>Valid (Current Data)</span>
+          </span>
+          <span class="legend-chip">
+            <span class="legend-square sq-invalid"></span>
+            <span>Invalid (Stale / Overwritten)</span>
+          </span>
+        </div>
+
+        <!-- Dynamic Segments Grid -->
+        <div class="clean-grid" id="flashSegmentsGrid">
+          <!-- Populated by app.js -->
+        </div>
+
+        <!-- Clean Metric Summary Bar -->
+        <div class="studio-stats-bar">
+          <div class="stat-item">
+            <span class="stat-caption">Logical Writes</span>
+            <span class="stat-num" id="mLogicalWrites">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-caption">Physical Writes</span>
+            <span class="stat-num" id="mPhysicalWrites">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-caption">Live WAF</span>
+            <span class="stat-num" style="color: var(--accent-emerald);" id="mWaf">1.00x</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-caption">Segment Erases</span>
+            <span class="stat-num" style="color: var(--accent-orange);" id="mErases">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-caption">GC Invocations</span>
+            <span class="stat-num" id="mGcRuns">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-caption">Migrated Pages</span>
+            <span class="stat-num" id="mGcCopied">0</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Clean Benchmarks Section -->
+    <section class="benchmarks-section" id="benchmarks">
+      <div class="section-title-wrap">
+        <div>
+          <h2 class="sec-title">Benchmark Results</h2>
+          <p class="sec-subtitle">Empirical findings measured across 2,000 operations on 32 flash segments.</p>
+        </div>
+      </div>
+
+      <div class="benchmark-bento-grid">
+        <!-- Exp 1: Strategy Comparison -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div class="chart-tag">Experiment 1</div>
+            <h3 class="chart-card-title">Strategy Comparison</h3>
+            <p class="chart-card-desc">In-Place rewrites cause 63.34x write amplification vs. 1.74x in F2FS.</p>
+          </div>
+          <div class="canvas-box">
+            <canvas id="chartStrategy"></canvas>
+          </div>
+          <div class="chart-card-footer">
+            <span style="font-weight: 600; color: var(--accent-emerald);">~36x Wear Reduction</span>
+            <a href="results/experiment_1_strategy_comparison.csv" download class="download-link">Download CSV →</a>
+          </div>
+        </div>
+
+        <!-- Exp 2: Utilization Curve -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <div class="chart-tag">Experiment 2</div>
+            <h3 class="chart-card-title">Storage Utilization Impact</h3>
+            <p class="chart-card-desc">WAF remains low until utilization passes 80%, surging at 95% due to GC migration.</p>
+          </div>
+          <div class="canvas-box">
+            <canvas id="chartUtilization"></canvas>
+          </div>
+          <div class="chart-card-footer">
+            <span style="font-weight: 600; color: var(--accent-orange);">1.06x at 40% → 18.74x at 95%</span>
+            <a href="results/experiment_2_utilization.csv" download class="download-link">Download CSV →</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Key Insights (Bento Row) -->
+    <section class="insights-row" id="insights">
+      <div class="insight-card">
+        <div class="insight-num">01</div>
+        <h4 class="insight-heading">Out-of-Place Writes</h4>
+        <p class="insight-text">
+          Because NAND flash cannot overwrite without an erase, F2FS writes updates to clean pages and marks old versions invalid, avoiding destructive full-segment rewrites.
+        </p>
+      </div>
+
+      <div class="insight-card">
+        <div class="insight-num">02</div>
+        <h4 class="insight-heading">Greedy Garbage Collection</h4>
+        <p class="insight-text">
+          When clean space drops, the cleaner selects segments containing the fewest valid pages, migrating surviving data and restoring completely free segments to the pool.
+        </p>
+      </div>
+
+      <div class="insight-card">
+        <div class="insight-num">03</div>
+        <h4 class="insight-heading">80/20 Workload Skew</h4>
+        <p class="insight-text">
+          Hot data blocks invalidate rapidly in the same segments. This clusters invalid space together, allowing the garbage collector to reclaim space with 13% fewer page migrations.
+        </p>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="app.js?v=6"></script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+workload,logical_writes,physical_writes,waf,segment_erases,gc_runs,gc_pages_copied
+uniform,2000,5395,2.6975,79,79,3395
+skewed,2000,4947,2.4735,72,72,2947
